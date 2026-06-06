@@ -704,13 +704,13 @@ export class BaileysStartupService extends ChannelStartupService {
     this.eventHandler();
 
     this.client.ws.on('CB:call', (packet) => {
-      console.log('CB:call', packet);
+      this.logger.debug({ event: 'CB:call', packet });
       const payload = { event: 'CB:call', packet: packet };
       this.sendDataWebhook(Events.CALL, payload, true, ['websocket']);
     });
 
     this.client.ws.on('CB:ack,class:call', (packet) => {
-      console.log('CB:ack,class:call', packet);
+      this.logger.debug({ event: 'CB:ack,class:call', packet });
       const payload = { event: 'CB:ack,class:call', packet: packet };
       this.sendDataWebhook(Events.CALL, payload, true, ['websocket']);
     });
@@ -941,9 +941,9 @@ export class BaileysStartupService extends ChannelStartupService {
     }) => {
       try {
         if (syncType === proto.HistorySync.HistorySyncType.ON_DEMAND) {
-          console.log('received on-demand history sync, messages=', messages);
+          this.logger.debug({ action: 'history.sync.on_demand', messagesCount: messages.length });
         }
-        console.log(
+        this.logger.debug(
           `recv ${chats.length} chats, ${contacts.length} contacts, ${messages.length} msgs (is latest: ${isLatest}, progress: ${progress}%), type: ${syncType}`,
         );
 
@@ -1108,14 +1108,14 @@ export class BaileysStartupService extends ChannelStartupService {
             if (text == 'requestPlaceholder' && !requestId) {
               const messageId = await this.client.requestPlaceholderResend(received.key);
 
-              console.log('requested placeholder resync, id=', messageId);
+              this.logger.debug(`requested placeholder resync, id=${messageId}`);
             } else if (requestId) {
-              console.log('Message received from phone, id=', requestId, received);
+              this.logger.debug({ action: 'message.received.from_phone', requestId, received });
             }
 
             if (text == 'onDemandHistSync') {
               const messageId = await this.client.fetchMessageHistory(50, received.key, received.messageTimestamp!);
-              console.log('requested on-demand sync, id=', messageId);
+              this.logger.debug(`requested on-demand sync, id=${messageId}`);
             }
           }
 
@@ -1196,7 +1196,7 @@ export class BaileysStartupService extends ChannelStartupService {
                   data: { name: received.pushName },
                 });
               } catch {
-                console.log(`Chat insert record ignored: ${received.key.remoteJid} - ${this.instanceId}`);
+                this.logger.debug(`Chat insert record ignored: ${received.key.remoteJid} - ${this.instanceId}`);
               }
             }
           }
@@ -1478,7 +1478,7 @@ export class BaileysStartupService extends ChannelStartupService {
           if (messageRaw.key.remoteJid?.includes('@lid') && messageRaw.key.remoteJidAlt) {
             messageRaw.key.remoteJid = messageRaw.key.remoteJidAlt;
           }
-          console.log(messageRaw);
+          this.logger.debug(messageRaw);
 
           this.sendDataWebhook(Events.MESSAGES_UPSERT, messageRaw);
 
@@ -1570,7 +1570,13 @@ export class BaileysStartupService extends ChannelStartupService {
         const cached = await this.baileysCache.get(updateKey);
 
         const secondsSinceEpoch = Math.floor(Date.now() / 1000);
-        console.log('CACHE:', { cached, updateKey, messageTimestamp: update.messageTimestamp, secondsSinceEpoch });
+        this.logger.debug({
+          action: 'cache.message_update',
+          cached,
+          updateKey,
+          messageTimestamp: update.messageTimestamp,
+          secondsSinceEpoch,
+        });
 
         if (
           (update.messageTimestamp && update.messageTimestamp === cached) ||
@@ -1719,7 +1725,7 @@ export class BaileysStartupService extends ChannelStartupService {
               try {
                 await this.prismaRepository.chat.update({ where: { id: existingChat.id }, data: chatToInsert });
               } catch {
-                console.log(`Chat insert record ignored: ${chatToInsert.remoteJid} - ${chatToInsert.instanceId}`);
+                this.logger.debug(`Chat insert record ignored: ${chatToInsert.remoteJid} - ${chatToInsert.instanceId}`);
               }
             }
           }
@@ -3153,7 +3159,7 @@ export class BaileysStartupService extends ChannelStartupService {
         });
 
         outputAudioStream.on('error', (error) => {
-          console.log('error', error);
+          this.logger.error(error);
           reject(error);
         });
 
@@ -3196,7 +3202,6 @@ export class BaileysStartupService extends ChannelStartupService {
           ])
           .pipe(outputAudioStream, { end: true })
           .on('error', function (error) {
-            console.log('error', error);
             reject(error);
           });
       });
@@ -4309,7 +4314,7 @@ export class BaileysStartupService extends ChannelStartupService {
 
     if ((cacheConf?.REDIS?.ENABLED && cacheConf?.REDIS?.URI !== '') || cacheConf?.LOCAL?.ENABLED) {
       if (await groupMetadataCache?.has(groupJid)) {
-        console.log(`Cache request for group: ${groupJid}`);
+        this.logger.debug(`Cache request for group: ${groupJid}`);
         const meta = await groupMetadataCache.get(groupJid);
 
         if (Date.now() - meta.timestamp > 3600000) {
@@ -4319,7 +4324,7 @@ export class BaileysStartupService extends ChannelStartupService {
         return meta.data;
       }
 
-      console.log(`Cache request for group: ${groupJid} - not found`);
+      this.logger.debug(`Cache request for group: ${groupJid} - not found`);
       return await this.updateGroupMetadataCache(groupJid);
     }
 
@@ -4860,7 +4865,7 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async baileysSendNode(stanza: any) {
-    console.log('stanza', JSON.stringify(stanza));
+    this.logger.debug({ action: 'baileys.send_node', stanza });
     const response = await this.client.sendNode(stanza);
 
     return response;
@@ -4944,7 +4949,7 @@ export class BaileysStartupService extends ChannelStartupService {
         catalog: productsCatalog,
       };
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
       return { wuid: jid, name: null, isBusiness: false };
     }
   }
